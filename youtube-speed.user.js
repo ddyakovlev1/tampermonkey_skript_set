@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube: любая скорость (видео + Shorts)
 // @namespace    danil.yt.speed
-// @version      3.3
+// @version      3.4
 // @description  Кнопки скорости поверх плеера: − / сброс / +. Видео и Shorts, скорость запоминается.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -22,12 +22,24 @@
   // VIDEO_SHIFT — на сколько левый край панели правее центра плеера.
   const VIDEO_TOP = 52;
   const VIDEO_SHIFT = 165;
-  // Shorts: снизу справа, на уровне строки с каналом и «Подписаться»
-  const SHORTS_BOTTOM = 46;
+  // Shorts: снизу справа, на уровне строки с каналом
+  const SHORTS_BOTTOM = 88;
   const SHORTS_RIGHT = 12;
 
-  // Сколько панель остаётся видна после ухода курсора с видео (мс)
-  const LINGER_MS = 2500;
+  // ── Скрытие: копия логики скрипта перевода VOT ──
+  // VOT показывает плашку при каждом движении курсора над видео и прячет её
+  // через «Delay before hiding the translate button» после ПОСЛЕДНЕГО движения —
+  // и когда курсор ушёл с видео, и когда он просто замер над видео.
+  // Поставь сюда то же значение, что в настройках VOT (по умолчанию 1000 мс, максимум 3000).
+  const HIDE_DELAY_MS = 1000;
+  // VOT проверяет таймер не непрерывно: первая проверка через 250 мс после движения,
+  // дальше раз в 1000 мс. Поэтому реальное скрытие наступает чуть позже задержки.
+  // Повторяем ту же сетку, чтобы плашки пропадали одновременно.
+  const VOT_FIRST_TICK = 250, VOT_IDLE_TICK = 1000;
+  const realDelay = d => d <= VOT_FIRST_TICK
+    ? VOT_FIRST_TICK
+    : VOT_FIRST_TICK + Math.ceil((d - VOT_FIRST_TICK) / VOT_IDLE_TICK) * VOT_IDLE_TICK;
+  const HIDE_AFTER = realDelay(HIDE_DELAY_MS);
 
   let speed = parseFloat(localStorage.getItem(KEY)) || 1;
   const labels = new Set();
@@ -71,7 +83,7 @@
       !!player.closest('ytd-shorts, ytd-reel-video-renderer');
   }
 
-  // Положение считаем заново при каждом показе: плеер может перейти
+  // Положение пересчитываем при каждом показе: плеер может перейти
   // из обычного режима в Shorts и обратно
   function layout(s) {
     const shorts = isShortsPlayer(s.player);
@@ -85,26 +97,27 @@
     }
   }
 
-  function update(s) {
-    layout(s);
-    const idle = !s.shorts && s.player.classList.contains('ytp-autohide');
-    const show = s.linger || (s.hover && !idle);
+  function setVisible(s, show) {
+    s.visible = show;
     s.panel.style.opacity = show ? '1' : '0';
     s.panel.style.pointerEvents = show ? 'auto' : 'none';
   }
 
-  function setHover(s, inside) {
-    if (inside === s.hover) return;
-    s.hover = inside;
+  const inRect = (el, x, y) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  };
+
+  // Движение над видео: показать и перезапустить таймер скрытия
+  function activity(s) {
+    layout(s);
+    setVisible(s, true);
     clearTimeout(s.timer);
-    if (inside) {
-      s.linger = false;
-    } else {
-      // Курсор ушёл с видео — держим панель ещё LINGER_MS, как плашку перевода
-      s.linger = true;
-      s.timer = setTimeout(() => { s.linger = false; update(s); }, LINGER_MS);
-    }
-    update(s);
+    s.timer = setTimeout(() => {
+      // Как в VOT: если курсор стоит на самой панели — не прятать
+      if (inRect(s.panel, mx, my)) return;
+      setVisible(s, false);
+    }, HIDE_AFTER);
   }
 
   function addPanel(player) {
@@ -130,44 +143,41 @@
     ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick'].forEach(ev =>
       panel.addEventListener(ev, e => e.stopPropagation()));
 
-    const s = { player, panel, shorts: null, hover: false, linger: false, timer: null };
+    const s = { player, panel, val, shorts: null, visible: false, timer: null };
     panels.push(s);
-    new MutationObserver(() => update(s)).observe(player, { attributes: true, attributeFilter: ['class'] });
-
     player.appendChild(panel);
-    update(s);
+    layout(s);
     console.log('[TM speed] панель добавлена в плеер', player.id || player.className, s.shorts ? '(Shorts)' : '');
   }
 
-  // Наведение определяем по координатам курсора и границам плеера.
-  // Так не мешают слои YouTube поверх видео (описание в Shorts, оверлеи)
-  // и уход курсора срабатывает надёжно.
-  let mx = -1, my = -1, queued = false;
-  function checkHover() {
-    queued = false;
+  // Наведение определяем по координатам курсора и границам плеера:
+  // слои YouTube поверх видео (описание в Shorts, оверлеи) не мешают.
+  let mx = -1, my = -1;
+  function onPointer(e) {
+    mx = e.clientX; my = e.clientY;
     panels.forEach(s => {
-      if (!s.player.isConnected) return;
-      const r = s.player.getBoundingClientRect();
-      const inside = r.width > 0 && r.height > 0 &&
-        mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom;
-      setHover(s, inside);
+      if (s.player.isConnected && inRect(s.player, mx, my)) activity(s);
     });
   }
-  const queueCheck = () => { if (!queued) { queued = true; requestAnimationFrame(checkHover); } };
+  document.addEventListener('pointermove', onPointer, { passive: true, capture: true });
+  document.addEventListener('pointerdown', onPointer, { passive: true, capture: true });
 
-  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; queueCheck(); }, { passive: true, capture: true });
-  // Курсор ушёл за пределы окна
-  document.documentElement.addEventListener('mouseleave', () => { mx = my = -1; queueCheck(); });
-  // Прокрутка Shorts двигает ролик под неподвижным курсором
-  window.addEventListener('scroll', queueCheck, { passive: true, capture: true });
-  window.addEventListener('wheel', queueCheck, { passive: true, capture: true });
+  // Как в VOT: клик мимо видео прячет панель сразу
+  document.addEventListener('click', e => {
+    panels.forEach(s => {
+      if (s.visible && !s.player.contains(e.target)) { clearTimeout(s.timer); setVisible(s, false); }
+    });
+  }, true);
 
   // Плееры появляются динамически (переходы, Shorts) — проверяем раз в секунду
   setInterval(() => {
     document.querySelectorAll('.html5-video-player').forEach(addPanel);
     for (let i = panels.length - 1; i >= 0; i--) {
-      if (!panels[i].player.isConnected) { labels.delete(panels[i].panel.firstChild.nextSibling); panels.splice(i, 1); }
+      if (!panels[i].player.isConnected) {
+        clearTimeout(panels[i].timer);
+        labels.delete(panels[i].val);
+        panels.splice(i, 1);
+      }
     }
-    queueCheck();
   }, 1000);
 })();
