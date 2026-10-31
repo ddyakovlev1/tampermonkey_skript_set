@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube: любая скорость (видео + Shorts)
 // @namespace    danil.yt.speed
-// @version      3.5
+// @version      3.6
 // @description  Кнопки скорости поверх плеера: − / сброс / +. Видео и Shorts, скорость запоминается.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -86,21 +86,42 @@
   }
 
   // Положение пересчитываем при каждом показе: плеер может перейти
-  // из обычного режима в Shorts и обратно
+  // из обычного режима в Shorts и обратно.
+  // Shorts: блок с каналом и описанием лежит ПОВЕРХ плеера и перехватывает клики,
+  // а панель внутри плеера не может подняться выше него. Поэтому в Shorts панель
+  // висит отдельно, на уровне страницы (position: fixed), и следует за плеером.
   function layout(s) {
     const shorts = isShortsPlayer(s.player);
-    if (shorts === s.shorts) return;
-    s.shorts = shorts;
     const st = s.panel.style;
     if (shorts) {
-      Object.assign(st, { left: '', top: '', right: SHORTS_RIGHT + 'px', bottom: SHORTS_BOTTOM + 'px' });
-    } else {
-      Object.assign(st, { right: '', bottom: '', left: `calc(50% + ${VIDEO_SHIFT}px)`, top: VIDEO_TOP + 'px' });
+      const host = document.fullscreenElement || document.body;
+      if (s.panel.parentNode !== host) host.appendChild(s.panel);
+      const r = s.player.getBoundingClientRect();
+      Object.assign(st, {
+        position: 'fixed', right: '', bottom: '',
+        left: (r.right - SHORTS_RIGHT - s.panel.offsetWidth) + 'px',
+        top: (r.bottom - SHORTS_BOTTOM - s.panel.offsetHeight) + 'px'
+      });
+    } else if (shorts !== s.shorts || s.panel.parentNode !== s.player) {
+      if (s.panel.parentNode !== s.player) s.player.appendChild(s.panel);
+      Object.assign(st, {
+        position: 'absolute', right: '', bottom: '',
+        left: `calc(50% + ${VIDEO_SHIFT}px)`, top: VIDEO_TOP + 'px'
+      });
     }
+    s.shorts = shorts;
+  }
+
+  // Пока панель Shorts видна — двигаем её вместе с роликом (прокрутка ленты)
+  function follow(s) {
+    if (!s.visible || !s.shorts) { s.raf = 0; return; }
+    layout(s);
+    s.raf = requestAnimationFrame(() => follow(s));
   }
 
   function setVisible(s, show) {
     s.visible = show;
+    if (show && s.shorts && !s.raf) s.raf = requestAnimationFrame(() => follow(s));
     s.panel.style.opacity = show ? '1' : '0';
     s.panel.style.pointerEvents = show ? 'auto' : 'none';
   }
@@ -123,7 +144,8 @@
   }
 
   function addPanel(player) {
-    if (player.querySelector('.tm-speed')) return;
+    if (player.dataset.tmSpeed) return;
+    player.dataset.tmSpeed = '1';
 
     const panel = document.createElement('div');
     panel.className = 'tm-speed';
@@ -145,7 +167,7 @@
     ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick'].forEach(ev =>
       panel.addEventListener(ev, e => e.stopPropagation()));
 
-    const s = { player, panel, val, shorts: null, visible: false, timer: null };
+    const s = { player, panel, val, shorts: null, visible: false, timer: null, raf: 0 };
     panels.push(s);
     player.appendChild(panel);
     layout(s);
@@ -167,7 +189,7 @@
   // Как в VOT: клик мимо видео прячет панель сразу
   document.addEventListener('click', e => {
     panels.forEach(s => {
-      if (s.visible && !s.player.contains(e.target)) { clearTimeout(s.timer); setVisible(s, false); }
+      if (s.visible && !s.player.contains(e.target) && !s.panel.contains(e.target)) { clearTimeout(s.timer); setVisible(s, false); }
     });
   }, true);
 
@@ -177,6 +199,8 @@
     for (let i = panels.length - 1; i >= 0; i--) {
       if (!panels[i].player.isConnected) {
         clearTimeout(panels[i].timer);
+        cancelAnimationFrame(panels[i].raf);
+        panels[i].panel.remove();
         labels.delete(panels[i].val);
         panels.splice(i, 1);
       }
