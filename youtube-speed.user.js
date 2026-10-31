@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         YouTube: любая скорость (видео + Shorts)
 // @namespace    danil.yt.speed
-// @version      3.4
+// @version      3.5
 // @description  Кнопки скорости поверх плеера: − / сброс / +. Видео и Shorts, скорость запоминается.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
 // @grant        none
 // @sandbox      DOM
 // @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/ddyakovlev1/YouTube_Speed_Unblocker/main/youtube-speed.user.js
+// @downloadURL  https://raw.githubusercontent.com/ddyakovlev1/YouTube_Speed_Unblocker/main/youtube-speed.user.js
 // ==/UserScript==
 
 (function () {
