@@ -5,7 +5,7 @@ Userscript для Tampermonkey/Violentmonkey: кнопки скорости по
 ## Установка
 
 1. Поставь расширение Tampermonkey или Violentmonkey.
-2. Открой ссылку: [youtube-speed.user.js](https://raw.githubusercontent.com/ddyakovlev1/Tampermonkey_Skript_Set/main/YouTube_Speed_Unblocker/youtube-speed.user.js).
+2. Открой ссылку: [youtube-speed.user.js](https://raw.githubusercontent.com/ddyakovlev1/tampermonkey_skript_set/main/YouTube_Speed_Unblocker/youtube-speed.user.js).
 3. Расширение предложит установить скрипт — подтверди.
 
 ## Как пользоваться

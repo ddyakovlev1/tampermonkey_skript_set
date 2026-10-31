@@ -8,8 +8,8 @@
 // @grant        none
 // @sandbox      DOM
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/ddyakovlev1/Tampermonkey_Skript_Set/main/YouTube_Speed_Unblocker/youtube-speed.user.js
-// @downloadURL  https://raw.githubusercontent.com/ddyakovlev1/Tampermonkey_Skript_Set/main/YouTube_Speed_Unblocker/youtube-speed.user.js
+// @updateURL    https://raw.githubusercontent.com/ddyakovlev1/tampermonkey_skript_set/main/YouTube_Speed_Unblocker/youtube-speed.user.js
+// @downloadURL  https://raw.githubusercontent.com/ddyakovlev1/tampermonkey_skript_set/main/YouTube_Speed_Unblocker/youtube-speed.user.js
 // ==/UserScript==
 
 (function () {

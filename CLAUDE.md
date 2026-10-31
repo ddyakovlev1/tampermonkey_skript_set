@@ -11,7 +11,7 @@
 ## Шапка скрипта
 
 - `@updateURL` и `@downloadURL` указывают на raw-файл в этом репо:
-  `https://raw.githubusercontent.com/ddyakovlev1/Tampermonkey_Skript_Set/main/<Папка>/<файл>.user.js`
+  `https://raw.githubusercontent.com/ddyakovlev1/tampermonkey_skript_set/main/<Папка>/<файл>.user.js`
 - При любом изменении кода повышать `@version`, иначе Tampermonkey не подтянет обновление.
 - `@name` и `@namespace` у существующих скриптов не менять: по ним Tampermonkey узнаёт уже установленный скрипт.
 
