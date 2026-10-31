@@ -17,7 +17,7 @@
 ## Установка
 
 1. Установи расширение [Tampermonkey](https://www.tampermonkey.net/).
-2. Открой ссылку: [fixed-video-folding.user.js](https://raw.githubusercontent.com/ddyakovlev1/Fixed_Video_Folding/main/fixed-video-folding.user.js).
+2. Открой ссылку: [fixed-video-folding.user.js](https://raw.githubusercontent.com/ddyakovlev1/Tampermonkey_Skript_Set/main/Fixed_Video_Folding/fixed-video-folding.user.js).
 3. Tampermonkey покажет окно установки. Нажми **«Установить»**.
 4. Обнови страницу с видео.
 
