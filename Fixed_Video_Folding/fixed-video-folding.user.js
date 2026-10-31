@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fixed Video Folding
 // @namespace    https://github.com/ddyakovlev1/Fixed_Video_Folding
-// @version      1.1.0
+// @version      1.1.1
 // @description  Горячие клавиши видео (свернуть в мини-плеер, полный экран и др.) работают на русской раскладке так же, как на английской
 // @author       ddyakovlev1
 // @match        *://*/*

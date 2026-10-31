@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube: любая скорость (видео + Shorts)
 // @namespace    danil.yt.speed
-// @version      3.7
+// @version      3.7.1
 // @description  Кнопки скорости поверх плеера: − / сброс / +. Видео и Shorts, скорость запоминается.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
