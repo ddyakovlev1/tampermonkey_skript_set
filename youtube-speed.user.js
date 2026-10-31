@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube: любая скорость (видео + Shorts)
 // @namespace    danil.yt.speed
-// @version      3.2
+// @version      3.3
 // @description  Кнопки скорости поверх плеера: − / сброс / +. Видео и Shorts, скорость запоминается.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -18,9 +18,10 @@
   const STEP = 0.25, MIN = 0.1, MAX = 16;
 
   // ── Положение панели (px). Подстрой под себя, если нужно ──
-  // Обычное видео: сверху справа, на уровне плашки «Перевести видео»
+  // Обычное видео: сверху, привязка к центру плеера (как плашка «Перевести видео»).
+  // VIDEO_SHIFT — на сколько левый край панели правее центра плеера.
   const VIDEO_TOP = 52;
-  const VIDEO_RIGHT = 124;
+  const VIDEO_SHIFT = 165;
   // Shorts: снизу справа, на уровне строки с каналом и «Подписаться»
   const SHORTS_BOTTOM = 46;
   const SHORTS_RIGHT = 12;
@@ -30,6 +31,7 @@
 
   let speed = parseFloat(localStorage.getItem(KEY)) || 1;
   const labels = new Set();
+  const panels = []; // состояние каждой панели
 
   const clamp = v => Math.min(MAX, Math.max(MIN, Math.round(v * 100) / 100));
 
@@ -69,9 +71,44 @@
       !!player.closest('ytd-shorts, ytd-reel-video-renderer');
   }
 
+  // Положение считаем заново при каждом показе: плеер может перейти
+  // из обычного режима в Shorts и обратно
+  function layout(s) {
+    const shorts = isShortsPlayer(s.player);
+    if (shorts === s.shorts) return;
+    s.shorts = shorts;
+    const st = s.panel.style;
+    if (shorts) {
+      Object.assign(st, { left: '', top: '', right: SHORTS_RIGHT + 'px', bottom: SHORTS_BOTTOM + 'px' });
+    } else {
+      Object.assign(st, { right: '', bottom: '', left: `calc(50% + ${VIDEO_SHIFT}px)`, top: VIDEO_TOP + 'px' });
+    }
+  }
+
+  function update(s) {
+    layout(s);
+    const idle = !s.shorts && s.player.classList.contains('ytp-autohide');
+    const show = s.linger || (s.hover && !idle);
+    s.panel.style.opacity = show ? '1' : '0';
+    s.panel.style.pointerEvents = show ? 'auto' : 'none';
+  }
+
+  function setHover(s, inside) {
+    if (inside === s.hover) return;
+    s.hover = inside;
+    clearTimeout(s.timer);
+    if (inside) {
+      s.linger = false;
+    } else {
+      // Курсор ушёл с видео — держим панель ещё LINGER_MS, как плашку перевода
+      s.linger = true;
+      s.timer = setTimeout(() => { s.linger = false; update(s); }, LINGER_MS);
+    }
+    update(s);
+  }
+
   function addPanel(player) {
     if (player.querySelector('.tm-speed')) return;
-    const shorts = isShortsPlayer(player);
 
     const panel = document.createElement('div');
     panel.className = 'tm-speed';
@@ -80,8 +117,6 @@
       display: 'flex', gap: '6px', opacity: '0', pointerEvents: 'none',
       transition: 'opacity .2s'
     });
-    if (shorts) Object.assign(panel.style, { right: SHORTS_RIGHT + 'px', bottom: SHORTS_BOTTOM + 'px' });
-    else Object.assign(panel.style, { right: VIDEO_RIGHT + 'px', top: VIDEO_TOP + 'px' });
 
     const val = makeBtn(speed + 'x', () => setSpeed(1), true);
     labels.add(val);
@@ -95,46 +130,44 @@
     ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick'].forEach(ev =>
       panel.addEventListener(ev, e => e.stopPropagation()));
 
-    // В Shorts описание лежит поверх плеера, поэтому следим за наведением
-    // на весь блок ролика, а не только на плеер
-    const hoverZone = shorts
-      ? (player.closest('ytd-reel-video-renderer, ytd-shorts') || player)
-      : player;
-
-    // hover — курсор над видео; linger — курсор ушёл, но панель ещё ждёт LINGER_MS
-    let hover = false, linger = false, lingerTimer = null;
-    const update = () => {
-      const show = linger || (hover && (shorts || !player.classList.contains('ytp-autohide')));
-      panel.style.opacity = show ? '1' : '0';
-      panel.style.pointerEvents = show ? 'auto' : 'none';
-    };
-    const enter = () => {
-      clearTimeout(lingerTimer);
-      linger = false;
-      hover = true;
-      update();
-    };
-    const leave = () => {
-      clearTimeout(lingerTimer);
-      // Если панель сейчас видна — держим её ещё LINGER_MS, как плашку перевода
-      linger = panel.style.opacity === '1';
-      hover = false;
-      update();
-      lingerTimer = setTimeout(() => { linger = false; update(); }, LINGER_MS);
-    };
-    hoverZone.addEventListener('mouseenter', enter);
-    hoverZone.addEventListener('mouseleave', leave);
-    // Панель лежит внутри hoverZone, поэтому наведение на неё = наведение на видео.
-    // Отдельные обработчики на панели не нужны: при переходе с панели на видео
-    // они ошибочно запускали таймер скрытия.
-    new MutationObserver(update).observe(player, { attributes: true, attributeFilter: ['class'] });
+    const s = { player, panel, shorts: null, hover: false, linger: false, timer: null };
+    panels.push(s);
+    new MutationObserver(() => update(s)).observe(player, { attributes: true, attributeFilter: ['class'] });
 
     player.appendChild(panel);
-    console.log('[TM speed] панель добавлена в плеер', player.id || player.className, shorts ? '(Shorts)' : '');
+    update(s);
+    console.log('[TM speed] панель добавлена в плеер', player.id || player.className, s.shorts ? '(Shorts)' : '');
   }
+
+  // Наведение определяем по координатам курсора и границам плеера.
+  // Так не мешают слои YouTube поверх видео (описание в Shorts, оверлеи)
+  // и уход курсора срабатывает надёжно.
+  let mx = -1, my = -1, queued = false;
+  function checkHover() {
+    queued = false;
+    panels.forEach(s => {
+      if (!s.player.isConnected) return;
+      const r = s.player.getBoundingClientRect();
+      const inside = r.width > 0 && r.height > 0 &&
+        mx >= r.left && mx <= r.right && my >= r.top && my <= r.bottom;
+      setHover(s, inside);
+    });
+  }
+  const queueCheck = () => { if (!queued) { queued = true; requestAnimationFrame(checkHover); } };
+
+  document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; queueCheck(); }, { passive: true, capture: true });
+  // Курсор ушёл за пределы окна
+  document.documentElement.addEventListener('mouseleave', () => { mx = my = -1; queueCheck(); });
+  // Прокрутка Shorts двигает ролик под неподвижным курсором
+  window.addEventListener('scroll', queueCheck, { passive: true, capture: true });
+  window.addEventListener('wheel', queueCheck, { passive: true, capture: true });
 
   // Плееры появляются динамически (переходы, Shorts) — проверяем раз в секунду
   setInterval(() => {
     document.querySelectorAll('.html5-video-player').forEach(addPanel);
+    for (let i = panels.length - 1; i >= 0; i--) {
+      if (!panels[i].player.isConnected) { labels.delete(panels[i].panel.firstChild.nextSibling); panels.splice(i, 1); }
+    }
+    queueCheck();
   }, 1000);
 })();
