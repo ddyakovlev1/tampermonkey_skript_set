@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fixed Video Folding
 // @namespace    https://github.com/ddyakovlev1/Fixed_Video_Folding
-// @version      1.1.1
+// @version      1.2.0
 // @description  Горячие клавиши видео (свернуть в мини-плеер, полный экран и др.) работают на русской раскладке так же, как на английской
 // @author       ddyakovlev1
 // @match        *://*/*
@@ -44,9 +44,6 @@
     'ь': 'KeyM', 'б': 'Comma', 'ю': 'Period', 'ё': 'Backquote',
   };
 
-  // События, которые создал сам скрипт. Их пропускаем, чтобы не зациклиться.
-  const own = new WeakSet();
-
   // Физическая клавиша: сначала из event.code, если его нет — по русской букве
   function physicalCode(e) {
     if (/^Key[A-Z]$/.test(e.code) || SYMBOLS[e.code]) return e.code;
@@ -87,7 +84,6 @@
   }
 
   function handler(e) {
-    if (own.has(e)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return; // браузер и так понимает Ctrl+… на любой раскладке
     if (e.isComposing) return;
 
@@ -97,32 +93,16 @@
     if (!key || key === e.key) return; // уже английская раскладка
     if (isTyping(e)) return;
 
-    // Глушим «русское» событие и отправляем такое же, но с английской буквой
-    e.stopImmediatePropagation();
-    e.preventDefault();
-
-    const copy = new KeyboardEvent(e.type, {
-      key,
-      code,
-      location: e.location,
-      repeat: e.repeat,
-      shiftKey: e.shiftKey,
-      ctrlKey: false,
-      altKey: false,
-      metaKey: false,
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-      view: window,
-    });
-
-    // Старые сайты смотрят keyCode/which — передаём их тоже
+    // Подменяем буквы прямо в настоящем событии и пускаем его дальше.
+    // Копию события не создаём: сайты часто отбрасывают «поддельные»
+    // события (isTrusted = false), а настоящее проходит везде.
     const keyCode = keyCodeFor(code);
-    Object.defineProperty(copy, 'keyCode', { get: () => keyCode });
-    Object.defineProperty(copy, 'which', { get: () => keyCode });
-
-    own.add(copy);
-    (e.target || document).dispatchEvent(copy);
+    const fake = { key, code, keyCode, which: keyCode };
+    for (const name in fake) {
+      try {
+        Object.defineProperty(e, name, { get: () => fake[name], configurable: true });
+      } catch (_) { /* свойство нельзя подменить — идём дальше */ }
+    }
   }
 
   // Ловим раньше всех: на window, в фазе перехвата
